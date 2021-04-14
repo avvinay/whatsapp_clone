@@ -8,33 +8,54 @@ import AttachFileIcon from '@material-ui/icons/AttachFile';
 import { useCollection } from 'react-firebase-hooks/firestore';
 import InsertEmoticonIcon from '@material-ui/icons/InsertEmoticon';
 import MicIcon from '@material-ui/icons/Mic';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import firebase from 'firebase'
 import Message from './Message'
+import getRecipientEmail from '../utils/getRecipientEmail'
+import TimeAgo from 'timeago-react'
 
-const ChatScreen = () => {
+const ChatScreen = ({chat, messages}) => {
 
     const [user] = useAuthState(auth)
     const [input, setInput] = useState("");
     const router = useRouter()
+    const endOfMessageRef = useRef(null)
     const [messagesSnapshot] = useCollection(
         db.collection("chats").doc(router.query.id).collection('messages').orderBy('timestamp','asc')
         )
+    const [recipientSnapshot] = useCollection(db.collection("users").where('email','==', getRecipientEmail(chat.users, user)))
+
 
     const showMessages = () => {
-        console.log(messagesSnapshot)
-        // if(messagesSnapshot) {
-        //     return messagesSnapshot.docs.map(message => (
-        //         <Message 
-        //             key={message.id}
-        //             user={message.data().user}
-        //             message={{
-        //                 ...message.data(),
-        //                 timestamp: message.data().timestamp?.toDate().getTime()
-        //             }}
-        //         />
-        //     )) 
-        // }
+        // console.log(messagesSnapshot)
+        if(messagesSnapshot) {
+            return messagesSnapshot.docs.map(message => (
+                <Message 
+                    key={message.id}
+                    user={message.data().user}
+                    message={{
+                        ...message.data(),
+                        timestamp: message.data().timestamp?.toDate().getTime()
+                    }}
+                />
+            )) 
+        } else {
+            // console.log(JSON.parse(messages))
+            return JSON.parse(messages).map(message => (
+                <Message 
+                    key={message.id}
+                    user={message.user}
+                    message={message}
+                />
+            ))
+        }
+    }
+
+    const scrollToBottom = () => {
+        endOfMessageRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+        })
     }
 
     const sendMessage = (e) => {
@@ -52,15 +73,36 @@ const ChatScreen = () => {
         })
 
         setInput('')
+        scrollToBottom()
     }
+
+    const recipient = recipientSnapshot?.docs?.[0]?.data()
+    const recipientEmail = getRecipientEmail(chat.users, user)
+
 
     return ( 
         <Container>
             <Header>
-                <Avatar />
+                {
+                    recipient ?
+                    <Avatar src={recipient?.photoURL} /> :
+                    <Avatar>{recipientEmail[0]}</Avatar>
+                }
                 <HeaderInfo>
-                    <h3>Rec Email</h3>
-                    <p>Last seeen ...</p>
+                    <h3>{recipientEmail}</h3>
+                    {
+                        recipientSnapshot ? (
+                            <p>Last active: {' '}
+                            {recipient?.lastSeen?.toDate() ? (
+                                <TimeAgo datetime={recipient?.lastSeen?.toDate()} />
+                            ) : 
+                                "Unavailable"
+                            }
+                            </p>
+                        )
+                        :
+                        <p>Loading last seen ...</p>
+                    }
                 </HeaderInfo>
                 <HeaderIcons>
                     <IconButton>
@@ -73,7 +115,7 @@ const ChatScreen = () => {
             </Header>
             <MessageContainer>
                 {showMessages()}
-                <EndOfMessage />
+                <EndOfMessage ref={endOfMessageRef} />
             </MessageContainer>
             <InputContainer>
                 <InsertEmoticonIcon />
@@ -111,6 +153,7 @@ const InputContainer = styled.form`
     position: sticky;
     background-color: white;
     z-index: 100;
+    bottom: 0;
 `;
  
 
@@ -143,10 +186,12 @@ const HeaderIcons = styled.div`
 const MessageContainer = styled.div`
     padding: 30px;
     background-color: #e5ded8;
-    min-height: 90vh;
+    min-height: 80vh;
+    /* overflow-y: scroll; */
 `;
 
 const EndOfMessage = styled.div`
+    margin-bottom: 50px;
 `;
 
 
